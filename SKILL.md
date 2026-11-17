@@ -1,11 +1,11 @@
 ---
 name: kakaotalk-win32
-description: Read and summarize KakaoTalk PC chats, write drafts, and send explicitly requested text, files, images, and videos on Windows through Win32 controls and verified native input. Use for local KakaoTalk control without screenshot/OCR or Computer Use tools.
+description: Read and summarize KakaoTalk PC chats including joined open chats, write drafts, send authorized text or attachments, and leave explicitly requested rooms on Windows through Win32 controls and verified native input, without screenshot/OCR or Computer Use tools.
 ---
 
 # KakaoTalk Win32
 
-Use the bundled Python helper to operate the logged-in Windows KakaoTalk client through window handles and native Windows input. It supports history reading, drafts, text sends, and attachments. Writes focus the verified chat window; sending uses `SendInput` with a brief Enter key hold, since posted Enter messages can be ignored by the client. It needs Windows, Python 3.10+, and `pywin32` in that interpreter; there is no network client or separate Kakao login.
+Use the bundled Python helper to operate the logged-in Windows KakaoTalk client through window handles and native Windows input. It supports history reading, selected-room discovery, drafts, text sends, attachments, and requested leaving. Writes focus the verified chat window; sending uses `SendInput` with a brief Enter key hold, since posted Enter messages can be ignored by the client. It needs Windows, Python 3.10+, and `pywin32` in that interpreter; there is no network client or separate Kakao login.
 
 Resolve `scripts/kakaoctl.py` relative to this skill's actual directory. Use `python -X utf8` (or `py -3 -X utf8`) so Korean and emoji survive console output. All command results are JSON. If `pywin32` is missing, use an existing interpreter containing it, or install it in a task-local virtual environment.
 
@@ -23,6 +23,12 @@ Use the room name exactly as displayed. The helper checks that every target belo
 If several KakaoTalk processes are present, put `--pid NUMBER` before the subcommand. Existing rooms only: this helper does not add friends or create rooms.
 
 For self-chat requests, use the user's confirmed actual self-chat title rather than searching the literal label `나와의 채팅`; the app also displays a separate `나` badge. Discover its current HWND each time. Do not infer self-chat from arbitrary contact names or assume the same title across accounts.
+
+## Open chats and the selected room
+
+Joined open chats use the same native composer/history controls and `read` command as other rooms. When a user has just joined or selected a room whose title is unknown, run `python -X utf8 "<skill-dir>/scripts/kakaoctl.py" selected`. This opens the chat list's current selection with Enter and returns its actual title/PID/HWND without copying history. Use those returned values for subsequent commands. It does not enumerate the whole list, identify the newest join, or classify a room as open chat; check the returned destination against the user's task before reading it.
+
+Read [references/open-chats.md](references/open-chats.md) for selection discovery, joining limitations, or leaving. Opening an invitation link is not proof of joining. The observed join preview and custom menus expose no actionable labels through Win32/UI Automation; automated new-room joining is not implemented. A user-completed join can be followed by `selected` and `read`.
 
 ## Read and summarize
 
@@ -59,6 +65,17 @@ Actual sending requires `--room-hwnd` and never opens a room through search. Reu
 ## File, image, and video attachments
 
 Use the `attach` command for a specified local file and verified open room; it plans by default and sends with `--execute`. Read [references/attachments.md](references/attachments.md) before an attachment task for file-picker binding, preview confirmation, verification, and recovery commands. TXT, PNG-photo, and H.264 MP4-video sending have been exercised in a self-chat configuration. Run real send tests only when requested.
+
+## Leave a room
+
+```powershell
+python -X utf8 "<skill-dir>/scripts/kakaoctl.py" leave --room "대상 방" --room-hwnd <verified-hwnd>
+python -X utf8 "<skill-dir>/scripts/kakaoctl.py" leave --room "대상 방" --room-hwnd <same-verified-hwnd> --execute
+```
+
+Only execute when the user asked to leave that room. Reading, joining, or updating the skill does not authorize a test leave. An existing leave request is sufficient authorization; do not ask again just because the client removes local chat history. The default is a plan with no input or focus changes. Read the open-chat reference before executing: the selected chat-list item must reopen the same verified HWND before Delete, and only the uniquely new, observed confirmation shape receives one native Enter. Do not interact with KakaoTalk during these foreground transitions.
+
+`status: left` requires both the bound room/confirmation windows to disappear and a subsequent exact-title local search to return `ROOM_NOT_FOUND`. This verifies the current client's state, not server membership independently. `leave_outcome_unknown` has a nonzero CLI exit status: inspect the current UI before any further action, since leaving may already have happened. Do not automatically repeat Delete, confirm an older popup, or rejoin a room to test it.
 
 ## Implementation and maintenance
 

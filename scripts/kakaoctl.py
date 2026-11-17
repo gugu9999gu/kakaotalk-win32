@@ -755,6 +755,12 @@ def parser():
     sub = root.add_subparsers(dest="command", required=True)
     inspect = sub.add_parser("inspect", help="Discover current app/windows without input.")
     inspect.add_argument("--tree", action="store_true")
+    sub.add_parser("selected", help="Open the current chat-list selection and report its title/handles, without reading history.")
+    leave = sub.add_parser("leave", help="Plan or execute explicitly requested leaving of a verified selected chat.")
+    leave.add_argument("--room", required=True, help="Exact title of the already verified room.")
+    leave.add_argument("--room-hwnd", type=lambda x: int(x, 0), required=True)
+    leave.add_argument("--execute", action="store_true")
+    leave.add_argument("--timeout", type=positive, default=3, help="Seconds to wait for each leave-dialog transition.")
     attach = sub.add_parser("attach", help="Plan or send one file/image/video to a verified open room.")
     attach.add_argument("--room", required=True)
     attach.add_argument("--room-hwnd", type=lambda x: int(x, 0), required=True)
@@ -801,6 +807,12 @@ def main():
         with api.exclusive():
             if args.command == "inspect":
                 result = api.inspect(args.tree)
+            elif args.command == "selected":
+                from kakao_rooms import RoomActions
+                result = RoomActions(app).selected()
+            elif args.command == "leave":
+                from kakao_rooms import RoomActions
+                result = RoomActions(app).leave(args.room, args.room_hwnd, execute=args.execute, timeout=args.timeout)
             elif args.command == "open":
                 result = {"status": "opened", "room": app.describe_room(app.resolve(args.room, args.room_hwnd))}
             elif args.command == "read":
@@ -818,7 +830,7 @@ def main():
                                    execute=getattr(args, "execute", False), append=getattr(args, "append", False),
                                    replace_draft=args.replace_draft, send_key=getattr(args, "send_key", "enter"))
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 2 if result.get("status") == "attachment_outcome_unknown" else 0
+        return 2 if result.get("status") in ("attachment_outcome_unknown", "leave_outcome_unknown") else 0
     except KakaoError as exc:
         print(json.dumps({"status": "error", "code": exc.code, "message": exc.message, **exc.details}, ensure_ascii=False, indent=2))
         return 2
