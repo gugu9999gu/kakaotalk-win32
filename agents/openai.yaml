@@ -1,0 +1,4 @@
+interface:
+  display_name: "KakaoTalk Win32"
+  short_description: "카카오톡 PC 대화 읽기·요약, 메시지와 파일·이미지·영상 전송"
+  default_prompt: "Use $kakaotalk-win32 to read, summarize, draft, or send authorized text, files, images, and videos to the specified KakaoTalk PC chat room."
