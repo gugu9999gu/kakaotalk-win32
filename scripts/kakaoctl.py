@@ -67,14 +67,19 @@ def normalized_text(text: str) -> str:
     return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
+HISTORY_DATE = re.compile(
+    r"\d{4}년\s*\d{1,2}월\s*\d{1,2}일(?:\s*[월화수목금토일]요일)?|"
+    r"(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),\s*"
+    r"(?:[A-Za-z]+\s+\d{1,2},\s*|\d{1,2}\s+[A-Za-z]+\s+)\d{4}"
+)
+
+
 def parse_history(text: str) -> list[dict]:
     """Parse Kakao's copied Korean/English log; retain unparsed text separately."""
     day = None
     messages: list[dict] = []
     for line in normalized_text(text).split("\n"):
-        if re.match(r"^\d{4}년\s*\d{1,2}월\s*\d{1,2}일", line) or re.match(
-            r"^(?:Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday),", line
-        ):
+        if HISTORY_DATE.fullmatch(line.strip()):
             day = line.strip()
             continue
         match = re.match(r"^\[(.+?)\] \[([^\]]*\d{1,2}:\d{2}[^\]]*)\] ?(.*)$", line)
@@ -163,38 +168,98 @@ class Controller:
                 or actual.composer != room.composer or actual.history != room.history):
             raise KakaoError("ROOM_CHANGED", "The room title or its native controls changed; stopped.")
 
-    def read(self, title: str, hwnd=None, limit=30, max_chars=16000, close_after=False) -> dict:
+    def load_older_history(self, room: Room, max_passes: int):
+        """Load earlier pages in the verified history control and copy checkpoints."""
+        previous = None
+        unchanged_passes = 0
+        self.api.focus(room.history)
+        for pass_number in range(1, max_passes + 1):
+            # Kakao loads a page when navigation reaches the top of the loaded list.
+            for _ in range(10):
+                self.assert_room(room, room.window.title)
+                self.api.key(room.history, 0x24)  # Home
+                self.api.key(room.history, 0x21)  # Page Up
+                time.sleep(0.28)
+            time.sleep(0.75)
+            for attempt in range(3):
+                self.assert_room(room, room.window.title)
+                try:
+                    raw, clipboard = self.api.copy_history(room.history)
+                    break
+                except KakaoError as exc:
+                    if exc.code != "COPY_TIMEOUT" or attempt == 2:
+                        raise
+                    self.api.focus(room.history)
+                    time.sleep(0.45)
+            if clipboard.get("clipboard_restore_skipped"):
+                raise KakaoError("CLIPBOARD_CHANGED", "The clipboard changed during history copy; stopped scrolling.")
+            unchanged_passes = unchanged_passes + 1 if raw == previous else 0
+            if unchanged_passes >= 2:
+                return raw, clipboard, {"passes": pass_number, "stop_reason": "stable_after_scroll"}
+            previous = raw
+        return raw, clipboard, {"passes": max_passes, "stop_reason": "scroll_limit"}
+
+    def read(self, title: str, hwnd=None, limit=30, max_chars=16000, close_after=False, *,
+             scroll_to_start=False, max_scroll_passes=40, year=None, oldest=False) -> dict:
+        if scroll_to_start and max_scroll_passes < 1:
+            raise KakaoError("INVALID_SCROLL_LIMIT", "The scroll pass limit must be positive.")
         room = self.resolve(title, hwnd)
         try:
             self.assert_room(room, title)
-            raw, clip = self.api.copy_history(room.history)
+            scroll = None
+            if scroll_to_start:
+                raw, clip, scroll = self.load_older_history(room, max_scroll_passes)
+            else:
+                raw, clip = self.api.copy_history(room.history)
             messages = parse_history(raw)
-            selected = messages[-limit:]
+            matched = messages
+            if year is not None:
+                year_pattern = re.compile(r"(?<!\d)" + str(year) + r"(?!\d)")
+                matched = [m for m in messages if year_pattern.search(m["date"] or "")]
+            selected = matched[:limit] if oldest else matched[-limit:]
             text = "\n\n".join(
                 f"{m['date'] or ''}\n[{m['sender']}] [{m['time']}] {m['text']}" for m in selected
-            ) if selected else normalized_text(raw)
+            ) if selected or year is not None else normalized_text(raw)
             cut = len(text) > max_chars
             if cut:
-                text = text[-max_chars:]
-            # Bound both representations, including a single oversized multiline message.
+                text = text[:max_chars] if oldest else text[-max_chars:]
             budget = max_chars
             kept = []
-            first_cut = False
-            for m in reversed(selected):
+            for m in selected if oldest else reversed(selected):
                 cost = len(m["text"])
                 if cost > budget:
                     if budget:
-                        kept.append({**m, "text": m["text"][-budget:], "truncated": True})
-                        first_cut = True
+                        excerpt = m["text"][:budget] if oldest else m["text"][-budget:]
+                        kept.append({**m, "text": excerpt, "truncated": True})
                     break
                 kept.append(m)
                 budget -= cost
-            return {"status": "read", "room": self.describe_room(room), "text": text,
-                    "messages": list(reversed(kept)), "copied_message_count": len(messages),
+            if not oldest:
+                kept.reverse()
+            result = {"status": "read", "room": self.describe_room(room), "text": text,
+                    "messages": kept, "copied_message_count": len(messages),
                     "copied_char_count": len(raw), "text_truncated": cut,
-                    "truncated_first_message": first_cut, "coverage": "locally_copyable_history",
+                    "truncated_first_message": bool(kept and kept[0].get("truncated")),
+                    "coverage": "locally_copyable_history",
                     **clip}
+            if scroll is not None or year is not None or oldest:
+                def when(message):
+                    return {k: message[k] for k in ("date", "time")}
+
+                result.update(year=year, matched_message_count=len(matched),
+                              oldest_loaded=when(messages[0]) if messages else None,
+                              newest_loaded=when(messages[-1]) if messages else None,
+                              message_limit_reached=len(matched) > len(selected))
+            if scroll is not None:
+                result["scroll"] = scroll
+            return result
         finally:
+            if scroll_to_start:
+                try:
+                    self.assert_room(room, title)
+                    self.api.focus(room.composer)
+                except Exception:
+                    pass  # Never let best-effort focus restore mask a read result.
             if close_after and room.opened_here:
                 try:
                     self.assert_room(room, title)
@@ -749,6 +814,12 @@ def positive(value):
     return number
 
 
+def calendar_year(value):
+    if not re.fullmatch(r"[1-9][0-9]{3}", value):
+        raise argparse.ArgumentTypeError("Use a four-digit calendar year.")
+    return int(value)
+
+
 def parser():
     root = argparse.ArgumentParser(description=__doc__)
     root.add_argument("--pid", type=positive, help="Select one KakaoTalk PID when several clients exist.")
@@ -781,6 +852,10 @@ def parser():
             cmd.add_argument("--limit", type=positive, default=30)
             cmd.add_argument("--max-chars", type=positive, default=16000)
             cmd.add_argument("--close-after", action="store_true", help="Close only a room opened by this read; avoid for read-then-write workflows.")
+            cmd.add_argument("--scroll-to-start", action="store_true", help="Load earlier history until copies stabilize or the scroll budget is reached.")
+            cmd.add_argument("--max-scroll-passes", type=positive, default=40, help="Maximum batches of top navigation before returning the loaded history.")
+            cmd.add_argument("--year", type=calendar_year, help="Return messages from this calendar year only, before applying output limits.")
+            cmd.add_argument("--oldest", action="store_true", help="Apply output limits starting with the earliest matching message.")
         if command in ("draft", "send"):
             text = cmd.add_mutually_exclusive_group(required=True)
             text.add_argument("--text")
@@ -816,7 +891,9 @@ def main():
             elif args.command == "open":
                 result = {"status": "opened", "room": app.describe_room(app.resolve(args.room, args.room_hwnd))}
             elif args.command == "read":
-                result = app.read(args.room, args.room_hwnd, args.limit, args.max_chars, args.close_after)
+                result = app.read(args.room, args.room_hwnd, args.limit, args.max_chars, args.close_after,
+                                  scroll_to_start=args.scroll_to_start, max_scroll_passes=args.max_scroll_passes,
+                                  year=args.year, oldest=args.oldest)
             elif args.command == "attach":
                 from kakao_attachments import AttachmentSender
                 result = AttachmentSender(app).send(args.room, args.room_hwnd, args.file,

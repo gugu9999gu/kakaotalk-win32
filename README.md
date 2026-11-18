@@ -10,7 +10,7 @@ Windows용 카카오톡 PC 클라이언트를 제어하는 에이전트 스킬�
 | `inspect` | 실행 중인 카카오톡과 창 핸들 확인 |
 | `selected` | 현재 목록에서 선택된 방을 열고 이름·핸들 확인 (내역 복사 없음) |
 | `open` | 이름이 정확히 일치하는 채팅방 열기 |
-| `read` | 복사 가능한 대화 내역 읽기 |
+| `read` | 최근 대화 읽기, 위로 스크롤해 과거 기록 불러오기, 연도 필터 |
 | `draft` | 메시지 초안 작성·덧붙이기 |
 | `send` | 전송 계획 확인 또는 명시적인 메시지 전송 |
 | `attach` | 파일·이미지·영상 첨부 계획 확인 또는 전송 |
@@ -119,6 +119,22 @@ python -B -X utf8 scripts/kakaoctl.py leave --room "대상 방" --room-hwnd 1234
 첨부 전송과 결과가 불확실한 시도의 확인 방법은 [첨부 가이드](references/attachments.md)를 참고하세요.
 선택한 오픈채팅방 읽기와 나가기 절차는 [오픈채팅 가이드](references/open-chats.md)에 있습니다.
 
+### 첫 메시지와 특정 연도 조회
+
+아래 예시의 방 이름과 `123456`은 현재 열린 채팅방의 정확한 이름과 `inspect` 또는 `open`에서 받은 HWND로 바꿉니다.
+
+```powershell
+# PC에서 조회 가능한 가장 오래된 메시지 한 건
+python -B -X utf8 scripts/kakaoctl.py read --room "대상 방" --room-hwnd 123456 --scroll-to-start --oldest --limit 1
+
+# 이전 기록을 불러온 뒤 2025년으로 필터링
+python -B -X utf8 scripts/kakaoctl.py read --room "대상 방" --room-hwnd 123456 --scroll-to-start --year 2025 --limit 2000 --max-chars 450000
+```
+
+`--scroll-to-start`는 채팅창을 전면에 띄우고 위로 이동해 이전 기록을 불러옵니다. 두 번 연속 내용이 그대로면 `stable_after_scroll`, 탐색 횟수 제한에 걸리면 `scroll_limit`를 반환합니다. 이때 `--max-scroll-passes`를 늘려 계속 조회할 수 있습니다. `oldest_loaded`는 현재 PC에서 확인한 가장 오래된 항목의 시각입니다.
+
+`--year`는 날짜별 메시지를 먼저 골라냅니다. 조회한 건수는 `matched_message_count`에서 확인하고, 반환 메시지 수와 `message_limit_reached`, `text_truncated`를 함께 확인하세요. 결과가 잘렸다면 `--limit`과 `--max-chars`를 조정합니다.
+
 ## 동작 범위
 
 - 쓰기 작업은 확인한 카카오톡 창을 전면에 활성화하고 입력창에 포커스를 둡니다.
@@ -137,7 +153,7 @@ python -B -X utf8 scripts/kakaoctl.py leave --room "대상 방" --room-hwnd 1234
 python -B -X utf8 -m unittest discover -s scripts -p "test_*.py"
 ```
 
-87개 테스트가 가짜 앱·창·클립보드·키 입력 큐와 임시 파일을 사용합니다.
+92개 테스트가 가짜 앱·창·클립보드·키 입력 큐와 임시 파일을 사용합니다.
 테스트 실행으로 실제 카카오톡에 메시지·파일을 보내거나 채팅방에서 나가지 않습니다.
 
 ## 구성

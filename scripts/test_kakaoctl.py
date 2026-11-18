@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from dataclasses import replace
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 from kakaoctl import ClipboardSnapshot, Controller, KakaoError, Room, Window, Win32, parse_history
 
@@ -219,6 +219,58 @@ class AppTests(unittest.TestCase):
         self.assertEqual(len(messages), 2)
         self.assertEqual(messages[1]["text"], "최신\n둘째 줄")
         self.assertEqual(messages[1]["date"], "2026년 11월 17일 화요일")
+
+    def test_date_like_message_body_does_not_replace_the_header(self):
+        messages = parse_history(
+            "2025년 1월 1일 수요일\n[가] [오후 1:00] 메모\n"
+            "1996년 2월 3일에 있었던 일\n[가] [오후 1:01] 다음 메시지"
+        )
+        self.assertIn("1996년 2월 3일에 있었던 일", messages[0]["text"])
+        self.assertEqual(messages[1]["date"], "2025년 1월 1일 수요일")
+
+    def test_deep_read_waits_for_two_unchanged_passes_even_after_a_pause(self):
+        older = "2024년 12월 31일 화요일\n[가] [오후 9:00] 처음\n"
+        recent = ("Wednesday, January 1, 2025\n[가] [10:00 AM] 첫날\n"
+                  "2026년 1월 1일 목요일\n[가] [오전 1:00] 새해\n")
+        self.api.copy_history = Mock(side_effect=[
+            (raw, {"clipboard_restored": True}) for raw in
+            (recent, recent, older + recent, older + recent, older + recent)
+        ])
+        self.api.focus = Mock()
+        with patch("kakaoctl.time.sleep"):
+            result = self.app.read("테스트 방", hwnd=100, limit=1, scroll_to_start=True, year=2025)
+        self.assertEqual(result["scroll"], {"passes": 5, "stop_reason": "stable_after_scroll"})
+        self.assertEqual(result["oldest_loaded"]["date"], "2024년 12월 31일 화요일")
+        self.assertEqual(result["copied_message_count"], 3)
+        self.assertEqual(result["matched_message_count"], 1)
+        self.assertEqual([m["text"] for m in result["messages"]], ["첫날"])
+        self.assertNotIn("새해", result["text"])
+        self.assertEqual(self.api.focus.mock_calls, [call(102), call(101)])
+
+    def test_deep_read_reports_scroll_limit_and_oldest_selection(self):
+        self.api.focus = Mock()
+        with patch("kakaoctl.time.sleep"):
+            result = self.app.read("테스트 방", hwnd=100, limit=1, scroll_to_start=True,
+                                   max_scroll_passes=1, oldest=True)
+        self.assertEqual(result["scroll"]["stop_reason"], "scroll_limit")
+        self.assertTrue(result["message_limit_reached"])
+        self.assertEqual([m["text"] for m in result["messages"]], ["앞 내용"])
+
+    def test_deep_read_retries_only_fresh_copy_timeout(self):
+        self.api.focus = Mock()
+        refreshed = (self.api.history, {"clipboard_restored": True})
+        self.api.copy_history = Mock(side_effect=[KakaoError("COPY_TIMEOUT", "late"), refreshed])
+        with patch("kakaoctl.time.sleep"):
+            result = self.app.read("테스트 방", hwnd=100, scroll_to_start=True, max_scroll_passes=1)
+        self.assertEqual(result["copied_message_count"], 2)
+        self.assertEqual(self.api.copy_history.call_count, 2)
+        self.assertEqual(self.api.focus.mock_calls, [call(102), call(102), call(101)])
+
+    def test_year_without_matches_does_not_return_unfiltered_history(self):
+        result = self.app.read("테스트 방", hwnd=100, year=2025)
+        self.assertEqual(result["text"], "")
+        self.assertEqual(result["messages"], [])
+        self.assertEqual(result["matched_message_count"], 0)
 
     def test_read_last_message_and_preserve_already_open_room(self):
         result = self.app.read("테스트 방", limit=1)
