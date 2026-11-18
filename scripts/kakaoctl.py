@@ -827,6 +827,15 @@ def parser():
     inspect = sub.add_parser("inspect", help="Discover current app/windows without input.")
     inspect.add_argument("--tree", action="store_true")
     sub.add_parser("selected", help="Open the current chat-list selection and report its title/handles, without reading history.")
+    restore = sub.add_parser("restore", help="Plan or open TalkCloud restore for one verified open room.")
+    restore.add_argument("--room", required=True)
+    restore.add_argument("--room-hwnd", type=lambda x: int(x, 0), required=True)
+    restore.add_argument("--execute", action="store_true", help="Open the room's official password dialog for manual entry.")
+    restore_status = sub.add_parser("restore-status", help="Verify the room's visible TalkCloud completion notice.")
+    restore_status.add_argument("--room", required=True)
+    restore_status.add_argument("--room-hwnd", type=lambda x: int(x, 0), required=True)
+    restore_status.add_argument("--dialog-hwnd", type=lambda x: int(x, 0), required=True)
+    restore_status.add_argument("--wait", type=positive, default=0, help="Seconds to wait for the completion notice.")
     leave = sub.add_parser("leave", help="Plan or execute explicitly requested leaving of a verified selected chat.")
     leave.add_argument("--room", required=True, help="Exact title of the already verified room.")
     leave.add_argument("--room-hwnd", type=lambda x: int(x, 0), required=True)
@@ -885,6 +894,13 @@ def main():
             elif args.command == "selected":
                 from kakao_rooms import RoomActions
                 result = RoomActions(app).selected()
+            elif args.command in ("restore", "restore-status"):
+                from kakao_restore import RestoreActions
+                restore = RestoreActions(app)
+                if args.command == "restore":
+                    result = restore.restore(args.room, args.room_hwnd, execute=args.execute)
+                else:
+                    result = restore.status(args.room, args.room_hwnd, args.dialog_hwnd, wait=args.wait)
             elif args.command == "leave":
                 from kakao_rooms import RoomActions
                 result = RoomActions(app).leave(args.room, args.room_hwnd, execute=args.execute, timeout=args.timeout)
@@ -907,7 +923,9 @@ def main():
                                    execute=getattr(args, "execute", False), append=getattr(args, "append", False),
                                    replace_draft=args.replace_draft, send_key=getattr(args, "send_key", "enter"))
         print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 2 if result.get("status") in ("attachment_outcome_unknown", "leave_outcome_unknown") else 0
+        return 2 if result.get("status") in (
+            "attachment_outcome_unknown", "leave_outcome_unknown", "restore_outcome_unknown"
+        ) else 0
     except KakaoError as exc:
         print(json.dumps({"status": "error", "code": exc.code, "message": exc.message, **exc.details}, ensure_ascii=False, indent=2))
         return 2

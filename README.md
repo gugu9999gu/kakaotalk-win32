@@ -11,13 +11,15 @@ Windows용 카카오톡 PC 클라이언트를 제어하는 에이전트 스킬�
 | `selected` | 현재 목록에서 선택된 방을 열고 이름·핸들 확인 (내역 복사 없음) |
 | `open` | 이름이 정확히 일치하는 채팅방 열기 |
 | `read` | 최근 대화 읽기, 위로 스크롤해 과거 기록 불러오기, 연도 필터 |
+| `restore` | 지정한 채팅방의 톡클라우드 복원 화면 열기 |
+| `restore-status` | 해당 채팅방의 복원 완료 안내 확인 |
 | `draft` | 메시지 초안 작성·덧붙이기 |
 | `send` | 전송 계획 확인 또는 명시적인 메시지 전송 |
 | `attach` | 파일·이미지·영상 첨부 계획 확인 또는 전송 |
 | `attach-resume` | 기존 첨부 시도의 결과 확인·미완료 확인 창 처리 |
 | `leave` | 확인한 방의 나가기 계획 확인 또는 실행·목록 검색 검증 |
 
-`send`, `attach`, `leave`는 기본적으로 계획만 반환하며, 실제 실행에는 `--execute`가 필요합니다.
+`send`, `attach`, `leave`, `restore`는 기본적으로 계획만 반환하며, 실제 실행에는 `--execute`가 필요합니다.
 작업 대상은 현재 프로세스 ID, 정확한 방 제목, 확인한 창 핸들로 고정합니다.
 
 ## 등록 및 설치
@@ -135,6 +137,22 @@ python -B -X utf8 scripts/kakaoctl.py read --room "대상 방" --room-hwnd 12345
 
 `--year`는 날짜별 메시지를 먼저 골라냅니다. 조회한 건수는 `matched_message_count`에서 확인하고, 반환 메시지 수와 `message_limit_reached`, `text_truncated`를 함께 확인하세요. 결과가 잘렸다면 `--limit`과 `--max-chars`를 조정합니다.
 
+### 톡클라우드에서 대화 복원
+
+복원할 채팅방을 먼저 열고 현재 HWND를 확인합니다. 아래 숫자는 예시입니다. 한국어 카카오톡 PC, 복원할 톡클라우드 백업, Windows PowerShell 5.1과 한국어 Windows OCR이 필요합니다.
+
+```powershell
+python -B -X utf8 scripts/kakaoctl.py restore --room "대상 방" --room-hwnd 123456 --execute
+```
+
+카카오톡에 열린 보안 키패드에서 My 비밀번호를 입력하고 **복원**을 누릅니다. 완료 안내를 닫기 전에 아래 명령의 `234567`을 앞 명령에서 반환한 `dialog_hwnd`로 바꿔 실행합니다.
+
+```powershell
+python -B -X utf8 scripts/kakaoctl.py restore-status --room "대상 방" --room-hwnd 123456 --dialog-hwnd 234567 --wait 30
+```
+
+`restored`는 카카오톡의 완료 문구를 확인한 상태입니다. 실제로 추가된 기록은 완료 창을 닫고 `read --scroll-to-start`로 확인하세요. [톡클라우드 복원 가이드](references/talkcloud.md)
+
 ## 동작 범위
 
 - 쓰기 작업은 확인한 카카오톡 창을 전면에 활성화하고 입력창에 포커스를 둡니다.
@@ -153,7 +171,7 @@ python -B -X utf8 scripts/kakaoctl.py read --room "대상 방" --room-hwnd 12345
 python -B -X utf8 -m unittest discover -s scripts -p "test_*.py"
 ```
 
-92개 테스트가 가짜 앱·창·클립보드·키 입력 큐와 임시 파일을 사용합니다.
+97개 테스트가 가짜 앱·창·클립보드·키 입력 큐와 임시 파일을 사용합니다.
 테스트 실행으로 실제 카카오톡에 메시지·파일을 보내거나 채팅방에서 나가지 않습니다.
 
 ## 구성
@@ -163,13 +181,17 @@ SKILL.md
 agents/openai.yaml
 references/attachments.md
 references/open-chats.md
+references/talkcloud.md
 scripts/kakaoctl.py
 scripts/kakao_attachments.py
 scripts/kakao_rooms.py
+scripts/kakao_restore.py
+scripts/kakao_restore_labels.ps1
 scripts/test_kakaoctl.py
 scripts/test_regressions.py
 scripts/test_attachments.py
 scripts/test_rooms.py
+scripts/test_restore.py
 ```
 
 개인 채팅 내역, 전송 receipt, 테스트 미디어, 계정별 방 이름은 포함하지 않습니다.

@@ -1,6 +1,6 @@
 ---
 name: kakaotalk-win32
-description: Read and summarize KakaoTalk PC chats, draft messages, send authorized text and attachments, and leave requested rooms using native Windows controls without Computer Use.
+description: Read KakaoTalk PC chats, draft messages, send authorized text and attachments, leave requested rooms, and restore TalkCloud backups using Windows controls.
 ---
 
 # KakaoTalk Win32
@@ -48,6 +48,12 @@ python -X utf8 "<skill-dir>/scripts/kakaoctl.py" read --room "대상 방" --room
 ```
 
 The helper sends Home and Page Up only to the room's history control and copies checkpoints until two consecutive passes show no change (`stable_after_scroll`) or the budget runs out (`scroll_limit`). The result describes what this PC client exposed. Extend the budget with `--max-scroll-passes` when needed and report remaining gaps. `--year` filters parsed date headers before applying output limits. For a complete year summary, check `matched_message_count` against the returned message count and check the truncation flags. When asked what the user personally sent, distinguish their sender label from KakaoTalk notices. Prefer a summary without passwords, tokens, or contact details.
+
+## Restore a room from TalkCloud
+
+Use `restore` only when the user requests TalkCloud restoration for a specific room. Start with the verified open room's exact title and handle. The default returns a plan. `restore --execute` opens the room's official restore prompt. Have the user enter their My password on KakaoTalk's keypad and click **복원**, then use `restore-status` with the returned `dialog_hwnd` while the completion notice is visible. The CLI accepts no password argument.
+
+Read [references/talkcloud.md](references/talkcloud.md) for prerequisites, status interpretation, and readback. This workflow reads menu labels and dialog headings through local Korean Windows OCR because the restore controls are custom drawn. History reading continues to use the native clipboard path.
 
 ## Write a draft
 
