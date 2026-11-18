@@ -1,6 +1,6 @@
 ---
 name: kakaotalk-win32
-description: Read and summarize KakaoTalk PC chats including joined open chats, write drafts, send authorized text or attachments, and leave explicitly requested rooms on Windows through Win32 controls and verified native input, without screenshot/OCR or Computer Use tools.
+description: Read and summarize KakaoTalk PC chats, draft messages, send authorized text and attachments, and leave requested rooms using native Windows controls without Computer Use.
 ---
 
 # KakaoTalk Win32

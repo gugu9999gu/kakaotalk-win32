@@ -1,6 +1,6 @@
 # KakaoTalk Win32
 
-Windows용 카카오톡 PC 클라이언트를 제어하는 Codex 스킬과 Python CLI입니다.
+Windows용 카카오톡 PC 클라이언트를 제어하는 에이전트 스킬과 Python CLI입니다. Codex와 Claude Code에 등록할 수 있습니다.
 창 핸들을 확인하고 Win32 메시지와 네이티브 입력을 사용해 참여 중인 오픈채팅의 대화 읽기, 메시지 작성·전송, 파일·이미지·영상 첨부, 요청한 채팅방 나가기를 수행합니다.
 
 ## 기능
@@ -20,22 +20,75 @@ Windows용 카카오톡 PC 클라이언트를 제어하는 Codex 스킬과 Pytho
 `send`, `attach`, `leave`는 기본적으로 계획만 반환하며, 실제 실행에는 `--execute`가 필요합니다.
 작업 대상은 현재 프로세스 ID, 정확한 방 제목, 확인한 창 핸들로 고정합니다.
 
-## 설치
+## 등록 및 설치
 
-필요 환경: Windows, 로그인된 카카오톡 PC, Python 3.10 이상.
-검증에 사용한 Python 버전은 3.11입니다.
+카카오톡 PC에 로그인한 Windows에서 진행하세요. Windows용 Python 3.10 이상이 필요하며, 아래 복제 명령을 사용하려면 Git도 설치되어 있어야 합니다. 카카오톡과 같은 Windows 사용자 세션에서 Python 명령을 실행하세요.
 
-PowerShell에서 빈 설치 경로에 저장소를 복제합니다.
+| 사용 환경 | 등록 방법 | 카카오톡 제어 |
+| --- | --- | --- |
+| Codex 앱·CLI | [Codex](#codex-앱cli) | Windows 로컬 세션 |
+| Claude Code CLI | [Claude Code](#claude-code-cli) | Windows 로컬 세션 |
+| Claude 데스크톱의 Code | [Claude 데스크톱](#claude-데스크톱) | `Local` 세션 |
+| Claude의 Chat·Cowork | [ZIP으로 등록](#chatcowork에-zip으로-등록) | 이 저장소의 Win32 스크립트는 Windows 로컬 세션에서 실행 |
+
+### Codex 앱·CLI
+
+Windows PowerShell에서 아래 명령을 실행하면 이 Windows 계정의 모든 Codex 프로젝트에서 사용할 수 있습니다.
 
 ```powershell
-$skillDir = Join-Path $env:USERPROFILE '.codex\skills\kakaotalk-win32'
-git clone https://github.com/gugu9999gu/kakaotalk-win32.git $skillDir
+$skillDir = Join-Path $env:USERPROFILE '.agents\skills\kakaotalk-win32'
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skillDir) | Out-Null
+git clone https://github.com/gugu9999gu/kakaotalk-win32.git "$skillDir"
+```
+
+[공통 실행 확인](#공통-실행-확인)을 마친 뒤 Codex 앱의 로컬 프로젝트나 Windows PowerShell에서 시작한 Codex CLI의 새 세션에서 다음을 입력합니다. 스킬이 목록에 보이지 않으면 Codex를 다시 시작하세요. [Codex 공식 스킬 가이드](https://learn.chatgpt.com/docs/build-skills)
+
+> $kakaotalk-win32 실행 중인 카카오톡 PC를 확인해줘.
+
+### Claude Code CLI
+
+Windows PowerShell에서 아래 명령을 실행하면 이 Windows 계정의 Claude Code에 등록됩니다.
+
+```powershell
+$skillDir = Join-Path $env:USERPROFILE '.claude\skills\kakaotalk-win32'
+New-Item -ItemType Directory -Force -Path (Split-Path -Parent $skillDir) | Out-Null
+git clone https://github.com/gugu9999gu/kakaotalk-win32.git "$skillDir"
+```
+
+[공통 실행 확인](#공통-실행-확인)을 마친 뒤 Windows PowerShell에서 `claude`를 실행하고 다음을 입력합니다. [Claude Code 공식 스킬 가이드](https://code.claude.com/docs/en/skills)
+
+> /kakaotalk-win32 실행 중인 카카오톡 PC를 확인해줘.
+
+### Claude 데스크톱
+
+1. 위 [Claude Code 등록 명령](#claude-code-cli)과 [공통 실행 확인](#공통-실행-확인)을 실행합니다.
+2. Claude 데스크톱을 열고 **Code** 탭에서 실행 환경 **Local**을 선택해 새 세션을 엽니다.
+3. `/kakaotalk-win32`를 선택하거나 “kakaotalk-win32 스킬로 실행 중인 카카오톡 PC를 확인해줘”라고 입력합니다. [Claude Code 데스크톱 공식 가이드](https://code.claude.com/docs/en/desktop)
+
+#### Chat·Cowork에 ZIP으로 등록
+
+Claude 계정의 스킬 목록에도 추가하려면 [소스 ZIP을 다운로드](https://github.com/gugu9999gu/kakaotalk-win32/archive/refs/heads/main.zip)하고 아래 순서로 진행합니다.
+
+1. ZIP을 풀고 `SKILL.md`가 들어 있는 `kakaotalk-win32-main` 폴더 이름을 `kakaotalk-win32`로 바꿉니다.
+2. 그 폴더 자체를 다시 ZIP으로 압축합니다. ZIP 안의 `kakaotalk-win32` 폴더 바로 아래에 `SKILL.md`가 있어야 합니다. [Claude 공식 패키징 가이드](https://support.claude.com/en/articles/12512198-how-to-create-custom-skills)
+3. Claude에서 **Customize → Skills → + → Create skill → Upload a skill**로 이동해 ZIP을 업로드하고 켭니다. [Claude 공식 업로드 가이드](https://support.claude.com/en/articles/12512180-use-skills-in-claude)
+
+이 경로는 Claude 계정에 스킬 지침을 등록하는 방법입니다. Chat과 Cowork의 코드 실행은 격리된 환경에서 이루어지므로, PC에서 실행 중인 카카오톡을 조작하려면 데스크톱의 **Code → Local**이나 Windows PowerShell을 사용하세요. [Claude Cowork 실행 환경](https://support.claude.com/en/articles/13345190-get-started-with-claude-cowork)
+
+### 공통 실행 확인
+
+선택한 앱의 등록 명령을 실행한 **같은 PowerShell 창**에서 이어서 실행합니다. `inspect`가 JSON에서 `"status": "inspected"`를 반환하면 카카오톡 창을 찾은 것입니다.
+
+```powershell
 python -m pip install -r "$skillDir\requirements.txt"
 python -B -X utf8 "$skillDir\scripts\kakaoctl.py" inspect
 ```
 
-같은 경로에 스킬이 이미 설치돼 있다면 별도 경로에서 변경 내용을 확인한 뒤 업데이트하세요.
-Codex에서 `$kakaotalk-win32`로 호출할 수 있으며, 자세한 작업 지침은 [SKILL.md](SKILL.md)에 있습니다.
+`python` 명령을 찾지 못하면 Windows용 Python을 설치한 뒤 PowerShell을 다시 열고 `$skillDir`를 지정하세요. Python Launcher를 쓰는 경우 두 명령의 `python`을 모두 `py -3`으로 바꾸면 됩니다. `APP_NOT_UNIQUE`가 나오면 같은 Windows 세션에서 카카오톡 PC에 로그인했는지 확인하세요. 여러 카카오톡 프로세스가 잡히면 `--pid`로 대상을 지정할 수 있습니다. 자세한 명령은 [SKILL.md](SKILL.md)에 있습니다.
+
+Git 없이 설치하려면 위 소스 ZIP을 풀고 폴더 이름을 `kakaotalk-win32`로 바꾼 뒤, Codex는 `%USERPROFILE%\.agents\skills`, Claude Code는 `%USERPROFILE%\.claude\skills` 아래에 폴더를 통째로 넣습니다. 해당 앱의 등록 블록에서 `$skillDir = ...` 줄을 실행하고 위 두 명령을 이어서 실행하세요.
+
+이미 설치했다면 기존 폴더를 사용하세요. Git으로 설치한 폴더는 `git -C "$skillDir" pull --ff-only`로 갱신할 수 있습니다. ZIP으로 설치했다면 새 버전을 내려받아 기존 설치 폴더의 필요한 파일을 갱신하세요.
 
 ## CLI 사용 예
 
